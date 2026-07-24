@@ -394,6 +394,119 @@ def gen_chitchat(r):
     return [a("user", content=q), a("assistant", content=ans)]
 
 
+# ================================================================ 새 시나리오
+
+def gen_git(r):
+    q, cmd, need_confirm = B.pick(r, B.GIT_TASKS)
+    if need_confirm:
+        return [
+            a("user", content=q),
+            *confirm_turn(r, f"`{cmd}` 실행할게요."),
+            a("assistant", calls=[ToolCall("shell.run", {"cmd": cmd})]),
+            a("tool", content='{"ok": true, "exit_code": 0}'),
+            a("assistant", content=B.pick(r, B.DONE)),
+        ]
+    return [
+        a("user", content=q),
+        a("assistant", calls=[ToolCall("shell.run", {"cmd": cmd})]),
+        a("tool", content=_fake("shell.run", {"cmd": cmd}, r)),
+        a("assistant", content=B.pick(r, ["확인했어요, 위 내용이에요.", "결과 보여드렸어요.",
+                                          "이렇게 나와요."])),
+    ]
+
+
+def gen_log_analysis(r):
+    """로그를 읽어 에러를 찾는 2-스텝."""
+    logf = B.pick(r, ["/var/log/app.log", "./logs/error.log", "server.log", "./logs/train.log"])
+    err = B.pick(r, ["ConnectionTimeout", "OOMError", "500 Internal Error",
+                     "PermissionDenied", "NullPointer"])
+    return [
+        a("user", content=B.phrase(r, ["{f} 에서 에러 있나 봐줘", "{f} 최근 에러 찾아줘",
+                                       "{f} 뭐 문제 있어?"], f=logf)),
+        a("assistant", think="로그 마지막 부분을 읽어 에러를 찾는다.",
+          calls=[ToolCall("shell.run", {"cmd": f"tail -n 50 {logf}"})]),
+        a("tool", content=f'{{"ok": true, "stdout": "... ERROR {err} at line 88 ..."}}'),
+        a("assistant", content=f"`{err}` 에러가 보여요. 88번째 줄쯤에서 났어요. 원인 찾아볼까요?"),
+    ]
+
+
+def gen_reminder(r):
+    when = B.pick(r, ["30분 뒤", "내일 아침 9시", "오후 3시", "퇴근 전", "다음 주 월요일"])
+    what = B.pick(r, ["약 먹기", "회의 자료 보내기", "지훈한테 전화", "빨래 돌리기",
+                      "보고서 제출", "택배 찾기", "은행 업무"])
+    return [
+        a("user", content=B.phrase(r, ["{w}에 {t} 알려줘", "{w} {t} 리마인드 해줘",
+                                       "{w}에 {t} 잊지 않게 해줘"], w=when, t=what)),
+        a("assistant", calls=[ToolCall("memory.save",
+                                       {"key": f"리마인더:{when}", "value": what})]),
+        a("tool", content='{"ok": true}'),
+        a("assistant", content=f"{when}에 '{what}' 알려드릴게요. 기억해 뒀어요."),
+    ]
+
+
+def gen_file_organize(r):
+    ext = B.pick(r, ["png", "pdf", "csv", "jpg", "zip", "mp4"])
+    dst = B.pick(r, ["images", "docs", "backup", "정리함", "archive"])
+    return [
+        a("user", content=B.phrase(r, ["{e} 파일들 {d} 폴더로 옮겨줘",
+                                       "{e} 전부 {d} 로 정리해줘"], e=ext, d=dst)),
+        *confirm_turn(r, f"현재 폴더의 *.{ext} 파일들을 `{dst}/` 로 옮길게요."),
+        a("assistant", calls=[ToolCall("shell.run",
+                                       {"cmd": f"mkdir -p {dst} && mv *.{ext} {dst}/"})]),
+        a("tool", content=f'{{"ok": true, "moved": {r.randint(2, 15)}}}'),
+        a("assistant", content=f"{ext} 파일들 `{dst}/` 로 옮겼어요."),
+    ]
+
+
+def gen_clarify(r):
+    """모호한 요청 → 함부로 실행하지 않고 되묻는다(중요 행동)."""
+    vague, ask = B.pick(r, [
+        ("파일 지워줘", "어떤 파일을 지울까요? 경로나 이름을 알려주세요."),
+        ("메일 보내줘", "누구에게, 어떤 내용으로 보낼지 알려주시면 초안부터 만들게요."),
+        ("그거 고쳐줘", "어떤 파일의 무엇을 고칠지 조금 더 알려주세요."),
+        ("정리해줘", "어떤 걸 정리할까요? 파일, 메일, 일정 중 무엇인가요?"),
+        ("실행해줘", "무엇을 실행할지 명령이나 파일을 알려주세요."),
+        ("보내줘", "어디로 무엇을 보낼까요? 메일인지 메신저인지 알려주세요."),
+    ])
+    return [
+        a("user", content=vague),
+        a("assistant", think="정보가 부족하다. 함부로 실행하지 말고 되묻는다.", content=ask),
+    ]
+
+
+def gen_data_process(r):
+    f = B.pick(r, ["data.csv", "sales.csv", "users.csv", "log.csv", "결과.csv"])
+    op = B.pick(r, [("행이 몇 개야?", "wc -l"), ("컬럼 이름 보여줘", "head -1"),
+                    ("첫 5줄 보여줘", "head -5")])
+    q, cmd = op
+    return [
+        a("user", content=f"{f} {q}"),
+        a("assistant", calls=[ToolCall("shell.run", {"cmd": f"{cmd} {f}"})]),
+        a("tool", content=f'{{"ok": true, "stdout": "{r.randint(10, 9999)}"}}' if cmd == "wc -l"
+          else '{"ok": true, "stdout": "id,name,value"}'),
+        a("assistant", content=B.pick(r, ["확인했어요, 위와 같아요.", "이렇게 나와요."])),
+    ]
+
+
+# ---------------------------------------------------------------- 멀티턴 래퍼
+
+FOLLOWUPS = [
+    ("고마워", None),
+    ("방금 거 다시 보여줘", None),
+    ("그럼 그다음은?", None),
+    ("하나만 더 해줘", None),
+    ("알겠어 수고", None),
+]
+
+
+def add_followup(r, dialog):
+    """일부 대화 끝에 짧은 후속 턴을 붙여 맥락 대화를 학습시킨다."""
+    q, _ = B.pick(r, FOLLOWUPS)
+    ans = B.pick(r, ["네, 또 필요하면 말씀하세요.", "알겠어요. 바로 해드릴게요.",
+                     "넵, 방금 결과 다시 정리해 드릴게요.", "언제든 불러주세요."])
+    return dialog + [a("user", content=q), a("assistant", content=ans)]
+
+
 # ================================================================ 가짜 결과
 
 def _fake(tool, args, r):
@@ -417,6 +530,18 @@ def _fake(tool, args, r):
         "python --version": '{"ok": true, "stdout": "Python 3.11.6"}',
         "du -sh .": '{"ok": true, "stdout": "1.2G ."}',
         "ping -c 1 8.8.8.8": '{"ok": true, "stdout": "1 packets received"}',
+        "date": '{"ok": true, "stdout": "2026-07-24 14:30 KST"}',
+        "nproc": '{"ok": true, "stdout": "8"}',
+        "docker ps": '{"ok": true, "stdout": "web  Up 2 hours  0.0.0.0:80->80"}',
+        "whoami": '{"ok": true, "stdout": "hobak"}',
+        "echo $PATH": '{"ok": true, "stdout": "/usr/local/bin:/usr/bin:/bin"}',
+        "git diff": '{"ok": true, "stdout": "@@ -1,3 +1,4 @@ ..."}',
+        "git push": '{"ok": true, "stdout": "main -> main"}',
+        "git stash": '{"ok": true, "stdout": "Saved working directory"}',
+        "git checkout main": '{"ok": true, "stdout": "Switched to branch main"}',
+        "git checkout -b feature": '{"ok": true, "stdout": "Switched to a new branch feature"}',
+        "git log -5 --oneline": '{"ok": true, "stdout": "a1b2c3d fix\\ne4f5g6h feat"}',
+        "pip list": '{"ok": true, "stdout": "numpy 1.26\\nrequests 2.31"}',
     }
     if cmd in table:
         return table[cmd]
@@ -479,12 +604,23 @@ GENERATORS: list[tuple[Gen, float]] = [
     (gen_multi_deploy, 0.9),
     (gen_refuse, 0.6),
     (gen_chitchat, 0.7),
+    # 새 시나리오
+    (gen_git, 1.0),
+    (gen_log_analysis, 0.7),
+    (gen_reminder, 0.7),
+    (gen_file_organize, 0.7),
+    (gen_clarify, 0.8),
+    (gen_data_process, 0.6),
 ]
 
 
 def sample_dialog(r):
     gens, weights = zip(*GENERATORS)
-    return r.choices(gens, weights=weights, k=1)[0](r)
+    dialog = r.choices(gens, weights=weights, k=1)[0](r)
+    # 20% 대화에 후속 턴을 붙여 맥락 대화를 학습(되묻기·인사 등 짧은 대화는 제외)
+    if len(dialog) >= 4 and B.maybe(r, 0.2):
+        dialog = add_followup(r, dialog)
+    return dialog
 
 
 def iter_dialogs(n: int, seed: int = 0) -> Iterator[Dialog]:
