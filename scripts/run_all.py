@@ -20,9 +20,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # 프리셋별 기본 학습 스텝(그냥 돌리면 되는 값)
+# base 는 무료 Colab 에서도 현실적이도록 낮췄다(seq_len 1024, batch 8, accum 2 권장).
+# 체크포인트를 HF 에 저장하며 여러 세션에 나눠 돌리는 것을 전제로 한다.
 STEPS = {
     "smoke": (300, 200),
-    "base": (20000, 6000),
+    "base": (3000, 5000),     # SFT 를 넉넉히 — 도구호출 유효성 학습이 관건
     "large": (40000, 8000),
     "xl": (60000, 10000),
 }

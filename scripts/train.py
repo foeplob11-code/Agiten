@@ -49,6 +49,10 @@ def lr_at(step: int, warmup: int, total: int, peak: float, floor_ratio=0.1) -> f
 
 
 def pick_device():
+    # 환경변수로 강제 지정 가능(예: AGITEN_DEVICE=cpu). MPS가 뻗을 때 유용.
+    forced = os.environ.get("AGITEN_DEVICE", "").strip().lower()
+    if forced in ("cpu", "mps", "cuda"):
+        return forced
     if torch.cuda.is_available():
         return "cuda"
     if torch.backends.mps.is_available():   # Apple Silicon GPU
