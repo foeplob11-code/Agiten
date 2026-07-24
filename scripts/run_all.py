@@ -45,7 +45,16 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=60000, help="합성 대화 수")
     ap.add_argument("--pretrain-steps", type=int, default=None)
     ap.add_argument("--sft-steps", type=int, default=None)
+    # CPU 등 느린 환경에서 배치/시퀀스를 줄여 속도를 높이는 용도
+    ap.add_argument("--batch", type=int, default=None)
+    ap.add_argument("--accum", type=int, default=None)
+    ap.add_argument("--seq-len", type=int, default=None)
     args = ap.parse_args()
+
+    bs = ["--batch", str(args.batch)] if args.batch else []
+    ac = ["--accum", str(args.accum)] if args.accum else []
+    sl = ["--seq-len", str(args.seq_len)] if args.seq_len else []
+    extra = bs + ac + sl
 
     preset = "smoke" if args.quick else args.preset
     pt_steps, sft_steps = STEPS.get(preset, STEPS["base"])
@@ -76,7 +85,7 @@ def main() -> None:
     run([py, "scripts/train.py", "--stage", "pretrain", "--preset", preset,
          "--data", args.corpus, "--tokenizer", "tokenizer.json",
          "--out", f"runs/{preset}-pt", "--resume", "--grad-ckpt",
-         "--steps", str(pt_steps), *hf])
+         "--steps", str(pt_steps), *extra, *hf])
 
     # 4) SFT
     run([py, "scripts/train.py", "--stage", "sft", "--preset", preset,
@@ -84,7 +93,7 @@ def main() -> None:
          "--val", "data/processed/sft_val.jsonl",
          "--tokenizer", "tokenizer.json", "--out", f"runs/{preset}-sft",
          "--init", f"runs/{preset}-pt/ckpt_last.pt", "--resume", "--grad-ckpt",
-         "--steps", str(sft_steps), "--lr", "1e-4", "--warmup", "200", *hf])
+         "--steps", str(sft_steps), "--lr", "1e-4", "--warmup", "200", *extra, *hf])
 
     print(f"\n=== 끝! 대화해보기 ===")
     print(f"{py} scripts/chat.py --ckpt runs/{preset}-sft/ckpt_last.pt "
