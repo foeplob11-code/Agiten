@@ -22,3 +22,7 @@ venv/
 *.swp
 .idea/
 .vscode/
+
+# macOS 앱 빌드 결과물
+macapp/Agiten.app/
+*.app/

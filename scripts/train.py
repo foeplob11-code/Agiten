@@ -22,6 +22,7 @@ import argparse
 import math
 import os
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
@@ -47,12 +48,25 @@ def lr_at(step: int, warmup: int, total: int, peak: float, floor_ratio=0.1) -> f
     return peak * (floor_ratio + (1 - floor_ratio) * 0.5 * (1 + math.cos(math.pi * prog)))
 
 
-def pick_amp():
-    if not torch.cuda.is_available():
-        return torch.float32, False
-    if torch.cuda.is_bf16_supported():
-        return torch.bfloat16, True
-    return torch.float16, True
+def pick_device():
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():   # Apple Silicon GPU
+        return "mps"
+    return "cpu"
+
+
+def pick_amp(device):
+    if device == "cuda":
+        if torch.cuda.is_bf16_supported():
+            return torch.bfloat16, True
+        return torch.float16, True
+    # mps/cpu: fp32 로 안전하게(정확성 우선). mps 는 fp32여도 CPU보다 훨씬 빠름.
+    return torch.float32, False
+
+
+def amp_ctx(device, amp_dtype, use_amp):
+    return torch.autocast(device_type=device, dtype=amp_dtype) if use_amp else nullcontext()
 
 
 def save_ckpt(path, model, opt, step, cfg, extra=None):
@@ -99,8 +113,8 @@ def main() -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    amp_dtype, use_amp = pick_amp()
+    device = pick_device()
+    amp_dtype, use_amp = pick_amp(device)
     print(f"device={device}  amp={amp_dtype if use_amp else 'off'}")
 
     tok = AgitenTokenizer.load(args.tokenizer)
@@ -195,7 +209,7 @@ def main() -> None:
                 data_iter = iter(dl)
                 x, y, m = next(data_iter)
             x, y, m = x.to(device), y.to(device), m.to(device)
-            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+            with amp_ctx(device, amp_dtype, use_amp):
                 _, loss, _ = model(x, targets=y, loss_mask=m)
                 loss = loss / args.accum
             scaler.scale(loss).backward()
@@ -237,7 +251,7 @@ def evaluate(model, dl, device, amp_dtype, use_amp, max_batches=50):
         if i >= max_batches:
             break
         x, y, m = x.to(device), y.to(device), m.to(device)
-        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+        with amp_ctx(device, amp_dtype, use_amp):
             _, loss, _ = model(x, targets=y, loss_mask=m)
         total += loss.item()
         n += 1

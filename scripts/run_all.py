@@ -49,12 +49,15 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=None)
     ap.add_argument("--accum", type=int, default=None)
     ap.add_argument("--seq-len", type=int, default=None)
+    # grad-checkpointing 은 큰 모델 메모리 절약용. 작은 모델엔 느리기만 해서 기본 끔.
+    ap.add_argument("--grad-ckpt", action="store_true")
     args = ap.parse_args()
 
     bs = ["--batch", str(args.batch)] if args.batch else []
     ac = ["--accum", str(args.accum)] if args.accum else []
     sl = ["--seq-len", str(args.seq_len)] if args.seq_len else []
-    extra = bs + ac + sl
+    gc = ["--grad-ckpt"] if args.grad_ckpt else []
+    extra = bs + ac + sl + gc
 
     preset = "smoke" if args.quick else args.preset
     pt_steps, sft_steps = STEPS.get(preset, STEPS["base"])
@@ -84,7 +87,7 @@ def main() -> None:
     # 3) 프리트레인
     run([py, "scripts/train.py", "--stage", "pretrain", "--preset", preset,
          "--data", args.corpus, "--tokenizer", "tokenizer.json",
-         "--out", f"runs/{preset}-pt", "--resume", "--grad-ckpt",
+         "--out", f"runs/{preset}-pt", "--resume",
          "--steps", str(pt_steps), *extra, *hf])
 
     # 4) SFT
@@ -92,7 +95,7 @@ def main() -> None:
          "--data", "data/processed/sft.jsonl",
          "--val", "data/processed/sft_val.jsonl",
          "--tokenizer", "tokenizer.json", "--out", f"runs/{preset}-sft",
-         "--init", f"runs/{preset}-pt/ckpt_last.pt", "--resume", "--grad-ckpt",
+         "--init", f"runs/{preset}-pt/ckpt_last.pt", "--resume",
          "--steps", str(sft_steps), "--lr", "1e-4", "--warmup", "200", *extra, *hf])
 
     print(f"\n=== 끝! 대화해보기 ===")
