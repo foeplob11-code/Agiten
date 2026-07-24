@@ -1,0 +1,4 @@
+torch>=2.1
+tokenizers>=0.15
+huggingface_hub>=0.20   # 체크포인트/토크나이저 저장 (구글 드라이브 대신)
+datasets>=2.16          # scripts/fetch_pretrain.py 실제 코퍼스 다운로드용(선택)

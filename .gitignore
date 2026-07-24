@@ -1,0 +1,24 @@
+# 생성물 — 코드로 언제든 재생성됨. 저장소엔 넣지 않는다.
+data/
+runs/
+tokenizer.json
+tokenizer.json.*
+
+# 파이썬
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# 모델 가중치/체크포인트
+*.pt
+*.bin
+*.safetensors
+
+# OS / 에디터
+.DS_Store
+*.swp
+.idea/
+.vscode/
