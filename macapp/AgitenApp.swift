@@ -13,18 +13,21 @@ let SERVER_URL = "http://localhost:8000"
 
 extension Color {
     static let agBg     = Color.white
-    static let agSide   = Color(red: 0.965, green: 0.97, blue: 0.978)
+    static let agSide   = Color(red: 0.969, green: 0.969, blue: 0.972)   // ChatGPT 사이드바
     static let agPanel  = Color(red: 0.975, green: 0.978, blue: 0.985)
-    static let agLine   = Color(red: 0.90, green: 0.915, blue: 0.935)
-    static let agInk    = Color(red: 0.11, green: 0.12, blue: 0.15)
-    static let agMuted  = Color(red: 0.52, green: 0.55, blue: 0.61)
-    static let agBrand  = Color(red: 0.29, green: 0.33, blue: 0.83)
-    static let agBot    = Color(red: 0.955, green: 0.963, blue: 0.975)
-    static let agChip   = Color(red: 0.93, green: 0.95, blue: 1.0)
-    static let agChipTx = Color(red: 0.22, green: 0.29, blue: 0.72)
+    static let agLine   = Color(red: 0.906, green: 0.906, blue: 0.914)
+    static let agInk    = Color(red: 0.05, green: 0.05, blue: 0.06)      // 거의 검정
+    static let agMuted  = Color(red: 0.44, green: 0.45, blue: 0.48)
+    static let agUser   = Color(red: 0.945, green: 0.945, blue: 0.949)   // 유저 말풍선(연회색)
+    static let agSend    = Color(red: 0.09, green: 0.09, blue: 0.10)     // 검정 전송 버튼
+    static let agChip   = Color(red: 0.945, green: 0.955, blue: 0.98)
+    static let agChipTx = Color(red: 0.28, green: 0.33, blue: 0.62)
     static let agOk     = Color(red: 0.13, green: 0.68, blue: 0.38)
-    static let agSel    = Color(red: 0.90, green: 0.92, blue: 1.0)
+    static let agSel    = Color(red: 0.898, green: 0.902, blue: 0.914)   // 선택된 세션
+    static let agHover  = Color(red: 0.933, green: 0.933, blue: 0.941)
 }
+
+let AG_COL_WIDTH: CGFloat = 720   // 본문 최대 폭(챗지피티처럼 가운데 좁게)
 
 // ---------------------------------------------------------------- 데이터 (Codable 로 저장)
 
@@ -223,48 +226,58 @@ final class ChatModel: ObservableObject {
 
 struct BubbleView: View {
     let item: ChatItem
+    private let avatarPad: CGFloat = 42   // 어시스턴트 아바타 폭 만큼 들여쓰기
+
     var body: some View {
         switch item.kind {
         case "me":
-            HStack { Spacer(minLength: 36)
-                Text(item.text).foregroundColor(.white)
-                    .padding(.horizontal, 15).padding(.vertical, 10)
-                    .background(Color.agBrand)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: .agBrand.opacity(0.22), radius: 6, y: 2)
+            // 유저: 오른쪽 연회색 말풍선
+            HStack { Spacer(minLength: 60)
+                Text(item.text).foregroundColor(.agInk).textSelection(.enabled)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(Color.agUser)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
         case "bot":
-            HStack {
+            // 어시스턴트: 아바타 + 전체폭 텍스트(말풍선 없음)
+            HStack(alignment: .top, spacing: 12) {
+                avatar
                 Text(item.text).textSelection(.enabled).foregroundColor(.agInk)
-                    .padding(.horizontal, 15).padding(.vertical, 10)
-                    .background(Color.agBot)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.agLine, lineWidth: 1))
-                Spacer(minLength: 36)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 3)
             }
         case "think":
             HStack { Text("💭 \(item.text)").font(.caption).italic().foregroundColor(.agMuted); Spacer() }
-                .padding(.leading, 4)
+                .padding(.leading, avatarPad)
         case "call":
             HStack {
                 HStack(spacing: 5) {
-                    Text("⚙").font(.caption)
+                    Image(systemName: "wrench.and.screwdriver.fill").font(.caption2)
                     Text(item.text).font(.system(.caption, design: .monospaced)).bold()
-                    Text(item.arg).font(.system(.caption, design: .monospaced)).foregroundColor(.agChipTx.opacity(0.75))
+                    Text(item.arg).font(.system(.caption, design: .monospaced)).foregroundColor(.agChipTx.opacity(0.7))
                 }
                 .foregroundColor(.agChipTx)
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 11).padding(.vertical, 7)
                 .background(Color.agChip)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 Spacer()
-            }
+            }.padding(.leading, avatarPad)
         default: // result
             HStack {
                 Text(item.text).font(.system(.caption, design: .monospaced))
                     .foregroundColor(item.ok ? .agMuted : .red).lineLimit(3)
                 Spacer()
-            }.padding(.leading, 4)
+            }.padding(.leading, avatarPad)
         }
+    }
+
+    var avatar: some View {
+        Text("🤖").font(.system(size: 17))
+            .frame(width: 30, height: 30)
+            .background(Color.agSide)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.agLine, lineWidth: 1))
     }
 }
 
@@ -275,11 +288,15 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             Button(action: { model.newSession() }) {
-                HStack { Image(systemName: "square.and.pencil"); Text("새 대화").fontWeight(.medium); Spacer() }
-                    .foregroundColor(.agBrand)
-                    .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(Color.agChip)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.pencil").font(.system(size: 13))
+                    Text("새 대화").fontWeight(.medium); Spacer()
+                }
+                .foregroundColor(.agInk)
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.agBg)
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.agLine, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.plain).padding(10)
 
@@ -307,7 +324,7 @@ struct SessionRow: View {
     let selected: Bool
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "bubble.left").font(.caption).foregroundColor(selected ? .agBrand : .agMuted)
+            Image(systemName: "bubble.left").font(.caption).foregroundColor(selected ? .agInk : .agMuted)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.title.isEmpty ? "새 대화" : session.title)
                     .font(.callout).foregroundColor(.agInk).lineLimit(1)
@@ -343,41 +360,41 @@ struct ChatPane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(Color.agLine)
             messages
-            Divider().overlay(Color.agLine)
             composer
         }
         .background(Color.agBg)
-        .frame(minWidth: 460, minHeight: 520)
+        .frame(minWidth: 480, minHeight: 540)
     }
 
+    // 상단: 미니멀 (좌측 앱 이름, 우측 상태)
     var header: some View {
-        HStack(spacing: 11) {
-            Text("🤖").font(.system(size: 22))
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Agiten").font(.headline).foregroundColor(.agInk)
-                Text("내 자동화 비서").font(.caption).foregroundColor(.agMuted)
-            }
+        HStack(spacing: 8) {
+            Text("Agiten").font(.headline).foregroundColor(.agInk)
+            Text("자동화 비서").font(.caption).foregroundColor(.agMuted)
             Spacer()
             HStack(spacing: 6) {
                 Circle().fill(model.ready ? Color.agOk : Color.orange).frame(width: 7, height: 7)
                 Text(model.statusText).font(.caption).foregroundColor(.agMuted)
             }
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(Color.agPanel).clipShape(Capsule())
-            .overlay(Capsule().stroke(Color.agLine, lineWidth: 1))
         }
-        .padding(.horizontal, 18).padding(.vertical, 12).background(Color.agBg)
+        .padding(.horizontal, 20).padding(.vertical, 12)
+        .background(Color.agBg)
     }
 
     var messages: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 11) {
-                    if model.items.isEmpty { emptyState }
-                    ForEach(model.items) { item in BubbleView(item: item).id(item.id) }
-                }.padding(18)
+                if model.items.isEmpty {
+                    emptyState.frame(maxWidth: .infinity)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 22) {
+                        ForEach(model.items) { item in BubbleView(item: item).id(item.id) }
+                    }
+                    .frame(maxWidth: AG_COL_WIDTH)          // 가운데 좁은 컬럼
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 24).padding(.vertical, 24)
+                }
             }
             .background(Color.agBg)
             .onChange(of: model.items.count) { _, _ in
@@ -387,48 +404,60 @@ struct ChatPane: View {
     }
 
     var emptyState: some View {
-        VStack(spacing: 14) {
-            Text("🤖").font(.system(size: 44))
-            Text("무엇을 도와드릴까요?").font(.title3).fontWeight(.semibold).foregroundColor(.agInk)
-            Text("회원님이 처음부터 만든 자동화 비서예요.\n실제로 파일을 만들고 명령을 실행합니다.")
-                .multilineTextAlignment(.center).font(.callout).foregroundColor(.agMuted)
-            VStack(spacing: 7) {
+        VStack(spacing: 16) {
+            Spacer(minLength: 80)
+            Text("🤖").font(.system(size: 40))
+            Text("무엇을 도와드릴까요?").font(.title2).fontWeight(.semibold).foregroundColor(.agInk)
+            VStack(spacing: 8) {
                 ForEach(["이 폴더에 뭐 있어?", "test.py 만들고 실행해줘", "파일 지워줘"], id: \.self) { s in
-                    Text(s).font(.callout).foregroundColor(.agChipTx)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color.agChip).clipShape(Capsule())
-                        .onTapGesture { model.input = s }
+                    Button(action: { model.input = s }) {
+                        Text(s).font(.callout).foregroundColor(.agInk)
+                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .frame(maxWidth: 320, alignment: .leading)
+                            .background(Color.agBg)
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.agLine, lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }.buttonStyle(.plain)
                 }
-            }.padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity).padding(.top, 46)
+            }.padding(.top, 6)
+        }.padding(.horizontal, 24)
     }
 
+    // 하단: 챗지피티식 둥근 입력 + 원형 전송
     var composer: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Toggle(isOn: $model.allow) {
-                    Text("⚠ 위험 작업 실행 허용 (파일 쓰기·명령 실행)").font(.caption).foregroundColor(.agMuted)
-                }.toggleStyle(.checkbox)
-                Spacer()
-            }
-            HStack(spacing: 10) {
-                TextField("메시지를 입력하세요…", text: $model.input, axis: .vertical)
-                    .textFieldStyle(.plain).lineLimit(1...5).foregroundColor(.agInk)
-                    .padding(.horizontal, 14).padding(.vertical, 11).background(Color.agBg)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(Color.agLine, lineWidth: 1.2))
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Agiten에게 메시지…", text: $model.input, axis: .vertical)
+                    .textFieldStyle(.plain).lineLimit(1...6).font(.body).foregroundColor(.agInk)
+                    .padding(.leading, 8).padding(.vertical, 6)
                     .onSubmit { model.send() }
                 Button(action: { model.send() }) {
-                    Text("보내기").fontWeight(.semibold).foregroundColor(.white)
-                        .padding(.horizontal, 20).padding(.vertical, 12)
-                        .background((model.ready && !model.sending) ? Color.agBrand : Color.agMuted.opacity(0.35))
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        .frame(width: 30, height: 30)
+                        .background(canSend ? Color.agSend : Color.agMuted.opacity(0.35))
+                        .clipShape(Circle())
                 }
-                .buttonStyle(.plain).keyboardShortcut(.return, modifiers: []).disabled(!model.ready || model.sending)
+                .buttonStyle(.plain).keyboardShortcut(.return, modifiers: []).disabled(!canSend)
             }
+            .padding(.horizontal, 8).padding(.vertical, 7)
+            .background(Color.agBg)
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.agLine, lineWidth: 1.3))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+
+            Toggle(isOn: $model.allow) {
+                Text("⚠ 위험 작업 실행 허용 (파일 쓰기·명령 실행)").font(.caption2).foregroundColor(.agMuted)
+            }.toggleStyle(.checkbox)
         }
-        .padding(.horizontal, 16).padding(.vertical, 13).background(Color.agBg)
+        .frame(maxWidth: AG_COL_WIDTH)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 14)
+        .background(Color.agBg)
+    }
+
+    var canSend: Bool {
+        model.ready && !model.sending && !model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
