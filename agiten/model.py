@@ -98,7 +98,7 @@ class Attention(nn.Module):
         self.wo = nn.Linear(cfg.n_heads * self.head_dim, cfg.dim, bias=False)
         self.dropout = cfg.dropout
 
-    def forward(self, x, cos, sin, cache=None):
+    def forward(self, x, cos, sin, cache=None, use_cache=False):
         B, T, _ = x.shape
 
         q = self.wq(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
@@ -108,21 +108,20 @@ class Attention(nn.Module):
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
 
+        # 과거 k/v 이어붙이기(있으면). 캐시 모드면 첫 패스(cache=None)에서도 저장한다.
+        # 이 저장 로직이 빠지면 첫 패스 뒤 캐시가 비어 문맥을 잃는다(과거 버그).
         if cache is not None:
             past_k, past_v = cache
-            if past_k is not None:
-                k = torch.cat([past_k, k], dim=2)
-                v = torch.cat([past_v, v], dim=2)
-            new_cache = (k, v)
-        else:
-            new_cache = None
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+        new_cache = (k, v) if use_cache else None
 
         if self.n_rep > 1:
             k = k.repeat_interleave(self.n_rep, dim=1)
             v = v.repeat_interleave(self.n_rep, dim=1)
 
-        # 캐시 사용 중 T==1 이면 마스크 불필요, 아니면 causal
-        is_causal = cache is None or T > 1
+        # T>1(프리필/훈련)은 causal, 캐시로 T==1(디코드)은 마스크 불필요.
+        is_causal = T > 1
         out = F.scaled_dot_product_attention(
             q, k, v,
             dropout_p=self.dropout if self.training else 0.0,
@@ -151,8 +150,8 @@ class Block(nn.Module):
         self.ffn_norm = RMSNorm(cfg.dim, cfg.norm_eps)
         self.ffn = FeedForward(cfg)
 
-    def forward(self, x, cos, sin, cache=None):
-        h, new_cache = self.attn(self.attn_norm(x), cos, sin, cache)
+    def forward(self, x, cos, sin, cache=None, use_cache=False):
+        h, new_cache = self.attn(self.attn_norm(x), cos, sin, cache, use_cache)
         x = x + h
         x = x + self.ffn(self.ffn_norm(x))
         return x, new_cache
@@ -211,15 +210,16 @@ class Agiten(nn.Module):
         x = self.tok_emb(idx)
         cos, sin = self._rope(T, x.device, x.dtype, offset)
 
-        new_caches = [] if caches is not None else None
+        use_cache = caches is not None
+        new_caches = [] if use_cache else None
         for i, block in enumerate(self.blocks):
-            cache = caches[i] if caches is not None else None
+            cache = caches[i] if use_cache else None
             if self.grad_checkpointing and self.training:
                 x, nc = torch.utils.checkpoint.checkpoint(
-                    block, x, cos, sin, cache, use_reentrant=False
+                    block, x, cos, sin, cache, use_cache, use_reentrant=False
                 )
             else:
-                x, nc = block(x, cos, sin, cache)
+                x, nc = block(x, cos, sin, cache, use_cache)
             if new_caches is not None:
                 new_caches.append(nc)
 
@@ -248,13 +248,20 @@ class Agiten(nn.Module):
     def generate(self, idx, max_new_tokens=256, temperature=0.7, top_p=0.9,
                  top_k=50, stop_ids=(), repetition_penalty=1.05):
         self.eval()
+        max_len = self.cfg.max_seq_len
+        idx = idx[:, -max_len:]                 # 프롬프트가 한도 넘으면 뒤쪽만 유지
         caches = [None] * self.cfg.n_layers
         offset = 0
         cur = idx
         generated: list[int] = []
 
         for _ in range(max_new_tokens):
-            window = cur[:, -self.cfg.max_seq_len:]
+            if offset >= max_len:               # 문맥 한도 도달 → 중단(오버플로 방지)
+                break
+            window = cur[:, -max_len:]
+            room = max_len - offset             # RoPE/캐시가 넘치지 않게 남은 자리만
+            if window.shape[1] > room:
+                window = window[:, :room]
             logits, _, caches = self(window, caches=caches, offset=offset)
             offset += window.shape[1]
             logits = logits[:, -1, :].float()
