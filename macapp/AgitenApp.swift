@@ -85,6 +85,8 @@ final class ChatModel: ObservableObject {
         if sessions.isEmpty { newSession() }
         else { currentId = sessions[0].id; items = sessions[0].items }
         launchServerIfNeeded()
+        // 켤 때마다 서버 문맥을 비워 이전 대화가 새어들지 않게 한다
+        Task { try? await Task.sleep(nanoseconds: 1_500_000_000); resetServer() }
         Task { await pollLoop() }
     }
 
