@@ -55,7 +55,8 @@ def try_load_model():
         policy = ModelPolicy(model, tok, cfg, temperature=ARGS.temperature)
         STATE["executor"] = ex
         STATE["_needs_approval"] = set(NEEDS_APPROVAL)
-        STATE["agent"] = Agent(policy, ex, max_steps=ARGS.max_steps)
+        # 작은 모델은 짧은 시스템 프롬프트가 문맥을 아껴 안정적(도구는 가중치에 학습됨)
+        STATE["agent"] = Agent(policy, ex, max_steps=ARGS.max_steps, with_tools_prompt=False)
         STATE["model_name"] = f"{cfg.n_params()/1e6:.0f}M · {device}"
         STATE["ready"] = True
         STATE["detail"] = "준비됨"
@@ -149,7 +150,7 @@ def main():
     ap.add_argument("--tokenizer", default="tokenizer.json")
     ap.add_argument("--workspace", default="runtime/workspace")
     ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--temperature", type=float, default=0.6)
+    ap.add_argument("--temperature", type=float, default=0.3)
     ap.add_argument("--max-steps", type=int, default=6)
     ARGS = ap.parse_args()
 
