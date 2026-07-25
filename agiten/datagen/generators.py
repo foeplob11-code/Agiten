@@ -394,6 +394,19 @@ def gen_chitchat(r):
     return [a("user", content=q), a("assistant", content=ans)]
 
 
+def gen_identity(r):
+    """자기인식 — 어떻게 묻든 일관된 정체성이 나오게 한다.
+
+    질문/답변을 각각 여러 표현에서 뽑아 조합하므로 표현이 겹치지 않는다.
+    도구를 부르지 않고 바로 답하는 것도 함께 학습된다(정체성 질문에 shell.run 부르는 사고 방지).
+    """
+    questions, answers = B.pick(r, B.IDENTITY_QA)
+    return [
+        a("user", content=B.pick(r, questions)),
+        a("assistant", content=B.pick(r, answers)),
+    ]
+
+
 # ================================================================ 새 시나리오
 
 def gen_git(r):
@@ -603,7 +616,8 @@ GENERATORS: list[tuple[Gen, float]] = [
     (gen_web_fetch, 0.4),
     (gen_multi_deploy, 0.9),
     (gen_refuse, 0.6),
-    (gen_chitchat, 0.7),
+    (gen_chitchat, 0.9),
+    (gen_identity, 1.6),   # 정체성은 확실히 각인되도록 비중을 높게
     # 새 시나리오
     (gen_git, 1.0),
     (gen_log_analysis, 0.7),
